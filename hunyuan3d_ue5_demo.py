@@ -40,6 +40,20 @@ except ImportError:
     print("Install with: pip install unrealcv")
 
 def parse_arguments():
+    """
+    Parse command line arguments for the script.
+    
+    This function defines and processes the command line interface for the script,
+    including validation of required arguments based on the selected action.
+    
+    Available actions:
+    - import: Import a mesh into UE5 (requires obj_path)
+    - place: Place a blueprint in a running game (requires blueprint_path)
+    - full: Complete workflow from import to placement (requires obj_path)
+    
+    Returns:
+        argparse.Namespace: The parsed command line arguments
+    """
     parser = argparse.ArgumentParser(description='HunYuan3D-v2 to UE5 Import and Placement')
     parser.add_argument('--action', type=str, choices=['import', 'place', 'full'], required=True,
                         help='Action to perform: import, place, or full workflow')
@@ -103,7 +117,20 @@ def import_to_ue5(obj_path, asset_path='/Game/Meshes', blueprint_name='MeshBP'):
 
 def place_in_runtime(blueprint_path, location='0,0,100', rotation='0,0,0', scale='1,1,1'):
     """
-    Places the blueprint in the running UE5 instance using UnrealCV
+    Places the blueprint in the running UE5 instance using UnrealCV.
+    
+    This function connects to a running UE5 game instance with the UnrealCV plugin,
+    spawns the specified blueprint at the given location, and provides an interactive
+    prompt for further manipulation of the object in real-time.
+    
+    Args:
+        blueprint_path (str): Path to the blueprint in UE5's content browser
+        location (str): Location coordinates as "X,Y,Z" string (default: "0,0,100")
+        rotation (str): Rotation angles as "Pitch,Yaw,Roll" string (default: "0,0,0")
+        scale (str): Scale factors as "X,Y,Z" string (default: "1,1,1")
+        
+    Returns:
+        bool: True if the object was placed successfully, False otherwise
     """
     try:
         import unrealcv
@@ -214,6 +241,21 @@ def place_in_runtime(blueprint_path, location='0,0,100', rotation='0,0,0', scale
     return True
 
 def main():
+    """
+    Main entry point for the script.
+    
+    This function:
+    1. Parses the command line arguments
+    2. Based on the action parameter, performs one of the following operations:
+       - import: Provides instructions for importing a mesh in UE5's Python console
+       - place: Places an existing blueprint in a running UE5 game
+       - full: Guides the user through the complete workflow
+    
+    The script can handle three different workflows:
+    1. Import-only: For use within UE5's Python console
+    2. Place-only: For placing existing blueprints in a running game
+    3. Full workflow: A combination of both, guiding the user through each step
+    """
     args = parse_arguments()
     
     if args.action == 'import':

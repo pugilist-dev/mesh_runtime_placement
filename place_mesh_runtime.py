@@ -1,9 +1,39 @@
 #!/usr/bin/env python3
+"""
+Unreal Engine 5 Runtime Mesh Placement Module
+=============================================
+
+This module provides functionality to place 3D meshes in a running Unreal Engine 5 game 
+using the UnrealCV plugin. It connects to the UnrealCV server running in the game,
+sends commands to spawn the object at a specified location, and provides an interactive
+prompt for manipulating the object in real-time.
+
+Requirements:
+- UnrealCV Python client (pip install unrealcv)
+- A running UE5 game with UnrealCV plugin enabled
+
+Example usage:
+python place_mesh_runtime.py --blueprint_path /Game/Meshes/MeshBP --location 0,0,100
+"""
 import unrealcv
 import argparse
 import time
 
 def main():
+    """
+    Main function for the mesh placement tool. Parses command line arguments,
+    connects to UnrealCV, spawns the specified blueprint at the given location,
+    and provides an interactive command prompt for further manipulation.
+    
+    Command line arguments:
+    --blueprint_path: Path to the blueprint asset in UE5 (e.g., /Game/Meshes/MeshBP)
+    --location: Location to place the object as X,Y,Z (default: 0,0,100)
+    --rotation: Rotation of the object as Pitch,Yaw,Roll (default: 0,0,0)
+    --scale: Scale of the object as X,Y,Z (default: 1,1,1)
+    
+    Returns:
+        None
+    """
     parser = argparse.ArgumentParser(description='Place a UE5 blueprint at runtime using UnrealCV')
     parser.add_argument('--blueprint_path', type=str, required=True, 
                         help='Path to the blueprint asset in UE5 (e.g., /Game/Meshes/MeshBP)')
