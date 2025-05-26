@@ -3,9 +3,9 @@
 # This script demonstrates the workflow for a sample OBJ file
 
 # Configuration
-SAMPLE_OBJ="./sample_mesh.obj"  # Path to your sample mesh
-UE5_PROJECT_PATH="/path/to/your/ue5/project"  # Update this to your UE5 project path
-ASSET_PATH="/Game/Meshes/HunYuan"
+SAMPLE_OBJ="./data/result/mesh.obj"  # Path to your sample mesh
+UE5_PROJECT_PATH="D:/ue5/MyProject2/UnRealCVTest"  # Update this to your UE5 project path
+ASSET_PATH="/Game/LLMGenerated"
 BLUEPRINT_NAME="HunYuanMeshBP"
 SPAWN_LOCATION="0,0,100"  # X,Y,Z coordinates
 
