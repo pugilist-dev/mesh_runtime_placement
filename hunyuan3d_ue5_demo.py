@@ -69,9 +69,9 @@ def parse_arguments():
                         help='Full path to existing blueprint (for place action)')
     parser.add_argument('--location', type=str, default='0,0,100',
                         help='Location to place the object (X,Y,Z)')
-    parser.add_argument('--rotation', type=str, default='0,0,0',
+    parser.add_argument('--rotation', type=str, default='0,90,0',
                         help='Rotation of the object (Pitch,Yaw,Roll)')
-    parser.add_argument('--scale', type=str, default='1,1,1',
+    parser.add_argument('--scale', type=str, default='100,100,100',
                         help='Scale of the object (X,Y,Z)')
     
     args = parser.parse_args()
@@ -88,7 +88,7 @@ def parse_arguments():
 def import_to_ue5(obj_path, asset_path='/Game/Meshes', blueprint_name='MeshBP'):
     """
     This function should be run from within UE5's Python console.
-    It imports an OBJ file and creates a blueprint.
+    It imports an OBJ file and creates a blueprint with the mesh attached.
     
     Returns the path to the created blueprint.
     """
@@ -105,26 +105,31 @@ def import_to_ue5(obj_path, asset_path='/Game/Meshes', blueprint_name='MeshBP'):
     
     try:
         import unreal_engine_import
+        # Import the mesh and create a blueprint with it
         mesh_path, bp_path = unreal_engine_import.import_obj_to_uasset(
-            obj_path, asset_path, blueprint_name
+            obj_path, asset_path, blueprint_name, create_blueprint=True
         )
         print(f"Successfully imported {obj_path} to {mesh_path}")
-        print(f"Created blueprint at {bp_path}")
-        return bp_path
+        
+        if bp_path:
+            print(f"Created blueprint at {bp_path}")
+            return bp_path
+        else:
+            print("Blueprint creation failed. Using the imported mesh directly.")
+            return mesh_path
     except Exception as e:
         print(f"Error importing mesh: {e}")
         return None
 
-def place_in_runtime(blueprint_path, location='0,0,100', rotation='0,0,0', scale='1,1,1'):
+def place_in_runtime(asset_path, location='0,0,100', rotation='0,0,0', scale='1,1,1'):
     """
-    Places the blueprint in the running UE5 instance using UnrealCV.
+    Places a static mesh in the running UE5 instance using UnrealCV.
     
     This function connects to a running UE5 game instance with the UnrealCV plugin,
-    spawns the specified blueprint at the given location, and provides an interactive
-    prompt for further manipulation of the object in real-time.
+    and attempts to spawn the actual mesh asset at the specified location.
     
     Args:
-        blueprint_path (str): Path to the blueprint in UE5's content browser
+        asset_path (str): Path to the static mesh in UE5's content browser
         location (str): Location coordinates as "X,Y,Z" string (default: "0,0,100")
         rotation (str): Rotation angles as "Pitch,Yaw,Roll" string (default: "0,0,0")
         scale (str): Scale factors as "X,Y,Z" string (default: "1,1,1")
@@ -177,68 +182,134 @@ def place_in_runtime(blueprint_path, location='0,0,100', rotation='0,0,0', scale
     # Parse scale
     scale_x, scale_y, scale_z = map(float, scale.split(','))
     
-    # Ensure the blueprint path is in the correct format
-    bp_path = blueprint_path
+    # Format the blueprint path correctly for UnrealCV
+    print(f"Attempting to spawn blueprint: {asset_path}")
+    
+    # Ensure the blueprint path is in the correct format for UnrealCV
+    bp_path = asset_path
     if not bp_path.endswith('_C'):
-        # Add class specifier if needed
-        if '.' not in bp_path:
-            # Add the class name
-            bp_name = bp_path.split('/')[-1]
-            bp_path = f"{bp_path}.{bp_name}_C"
-        else:
-            # If already has a class name but missing _C
-            bp_path = f"{bp_path}_C"
+        # Extract the blueprint name from the path
+        bp_name = bp_path.split('/')[-1]
+        # Add the class specifier
+        bp_path = f"{bp_path}.{bp_name}_C"
     
-    print(f"Spawning blueprint: {bp_path}")
+    print(f"Formatted blueprint path: {bp_path}")
     
-    # Spawn the blueprint at the specified location
-    spawn_cmd = f'vset /objects/spawn {bp_path} {x} {y} {z}'
+    # Method 1: Try to spawn the blueprint using the correct UnrealCV command
+    print("Method 1: Trying to spawn blueprint with vset /objects/spawn...")
+    spawn_cmd = f'vset /objects/spawn {bp_path} SpawnedObject_{int(time.time())}'
     response = client.request(spawn_cmd)
     
-    if response.startswith('error'):
-        print(f"Error spawning object: {response}")
+    if not response.startswith('error'):
+        object_name = f"SpawnedObject_{int(time.time())}"
+        print(f"Successfully spawned blueprint with name: {object_name}")
+        
+        # Set its location
+        loc_cmd = f'vset /object/{object_name}/location {x} {y} {z}'
+        loc_response = client.request(loc_cmd)
+        print(f"Set location response: {loc_response}")
+        
+        # Set its rotation if needed
+        if rotation != '0,0,0':
+            rot_cmd = f'vset /object/{object_name}/rotation {pitch} {yaw} {roll}'
+            rot_response = client.request(rot_cmd)
+            print(f"Set rotation response: {rot_response}")
+        
+        # Set its scale if needed
+        if scale != '1,1,1':
+            scale_cmd = f'vset /object/{object_name}/scale {scale_x} {scale_y} {scale_z}'
+            scale_response = client.request(scale_cmd)
+            print(f"Set scale response: {scale_response}")
+        
+        print(f"Object placed successfully at location {x}, {y}, {z}")
+        
+        try:
+            while True:
+                command = input("\nEnter a custom UnrealCV command (or 'exit' to quit): ")
+                if command.lower() == 'exit':
+                    break
+                
+                response = client.request(command)
+                print(f"Response: {response}")
+        except KeyboardInterrupt:
+            print("\nExiting...")
+        finally:
+            client.disconnect()
+            print("Disconnected from UnrealCV")
+        
+        return True
+    
+    # Method 2: Try alternative blueprint path formats
+    print("Method 1 failed. Trying alternative blueprint path formats...")
+    
+    # Try without the _C suffix
+    alt_bp_path = asset_path
+    if alt_bp_path.endswith('_C'):
+        alt_bp_path = alt_bp_path[:-2]
+    
+    spawn_cmd = f'vset /objects/spawn {alt_bp_path} SpawnedObject_{int(time.time())}'
+    print(f"Trying: {spawn_cmd}")
+    response = client.request(spawn_cmd)
+    
+    if not response.startswith('error'):
+        object_name = f"SpawnedObject_{int(time.time())}"
+        print(f"Successfully spawned blueprint with alternative path: {object_name}")
+        
+        # Set its location
+        loc_cmd = f'vset /object/{object_name}/location {x} {y} {z}'
+        client.request(loc_cmd)
+        
+        print(f"Object placed successfully at location {x}, {y}, {z}")
         client.disconnect()
-        return False
+        return True
     
-    print(f"Object spawned with ID: {response}")
-    object_id = response
+    # Method 3: Try using vrun to execute UE4 console commands
+    print("Method 2 failed. Trying UE4 console command...")
     
-    # Set rotation if needed
-    if rotation != '0,0,0':
-        rot_cmd = f'vset /object/{object_id}/rotation {pitch} {yaw} {roll}'
-        rot_response = client.request(rot_cmd)
-        print(f"Set rotation: {rot_response}")
+    # Try using UE4's built-in spawn command
+    ue4_spawn_cmd = f'vrun "SpawnActor {bp_path} Location=({x},{y},{z})"'
+    print(f"Trying: {ue4_spawn_cmd}")
+    response = client.request(ue4_spawn_cmd)
     
-    # Set scale if needed
-    if scale != '1,1,1':
-        scale_cmd = f'vset /object/{object_id}/scale {scale_x} {scale_y} {scale_z}'
-        scale_response = client.request(scale_cmd)
-        print(f"Set scale: {scale_response}")
-    
-    print("\nObject placed successfully!")
-    print("Commands available:")
-    print("  - Press Ctrl+C to exit")
-    print("  - The object ID is:", object_id)
-    print("  - To move object, you can use:")
-    print(f"    vset /object/{object_id}/location X Y Z")
-    print(f"    vset /object/{object_id}/rotation PITCH YAW ROLL")
-    print(f"    vset /object/{object_id}/scale X Y Z")
-    
-    try:
-        while True:
-            command = input("\nEnter a custom UnrealCV command (or 'exit' to quit): ")
-            if command.lower() == 'exit':
-                break
-            
-            response = client.request(command)
-            print(f"Response: {response}")
-    except KeyboardInterrupt:
-        print("\nExiting...")
-    finally:
+    if not response.startswith('error'):
+        print(f"Successfully spawned using UE4 console command")
+        print(f"Response: {response}")
         client.disconnect()
-        print("Disconnected from UnrealCV")
+        return True
     
-    return True
+    # Method 4: Fallback to cube as before, but with better error reporting
+    print("All blueprint spawn methods failed.")
+    print(f"Error responses:")
+    print(f"  Method 1 response: {client.request(f'vset /objects/spawn {bp_path} TestObject')}")
+    print(f"  Method 2 response: {client.request(f'vset /objects/spawn {alt_bp_path} TestObject')}")
+    
+    print("Falling back to spawning a placeholder cube...")
+    spawn_cube_cmd = f'vset /objects/spawn StaticMeshActor PlaceholderCube_{int(time.time())}'
+    response = client.request(spawn_cube_cmd)
+    
+    if not response.startswith('error'):
+        cube_name = f"PlaceholderCube_{int(time.time())}"
+        print(f"Spawned placeholder cube with name: {cube_name}")
+        
+        # Set its location
+        loc_cmd = f'vset /object/{cube_name}/location {x} {y} {z}'
+        client.request(loc_cmd)
+        
+        print(f"Placeholder cube placed at location {x}, {y}, {z}")
+        print(f"Your blueprint is available at: {asset_path}")
+        print("To manually spawn your blueprint, try these commands in the UnrealCV console:")
+        print(f"  vset /objects/spawn {bp_path} MyObject")
+        print(f"  vset /objects/spawn {alt_bp_path} MyObject")
+        
+        client.disconnect()
+        return True
+    
+    print("\nAll spawn methods failed. Please check:")
+    print("1. That the blueprint was created successfully in UE5")
+    print("2. That the blueprint path is correct")
+    print("3. That UnrealCV is properly connected")
+    client.disconnect()
+    return False
 
 def main():
     """
@@ -248,13 +319,8 @@ def main():
     1. Parses the command line arguments
     2. Based on the action parameter, performs one of the following operations:
        - import: Provides instructions for importing a mesh in UE5's Python console
-       - place: Places an existing blueprint in a running UE5 game
+       - place: Places a static mesh in a running UE5 game
        - full: Guides the user through the complete workflow
-    
-    The script can handle three different workflows:
-    1. Import-only: For use within UE5's Python console
-    2. Place-only: For placing existing blueprints in a running game
-    3. Full workflow: A combination of both, guiding the user through each step
     """
     args = parse_arguments()
     
@@ -265,7 +331,7 @@ def main():
         print(f"import sys")
         print(f"sys.path.append('{os.path.dirname(os.path.abspath(__file__))}')")
         print(f"import hunyuan3d_ue5_demo as demo")
-        print(f"demo.import_to_ue5('{args.obj_path}', '{args.asset_path}', '{args.blueprint_name}')")
+        print(f"mesh_path = demo.import_to_ue5('{args.obj_path}', '{args.asset_path}')")
         print("=" * 50 + "\n")
     
     elif args.action == 'place':
@@ -278,18 +344,18 @@ def main():
         print(f"import sys")
         print(f"sys.path.append('{os.path.dirname(os.path.abspath(__file__))}')")
         print(f"import hunyuan3d_ue5_demo as demo")
-        print(f"bp_path = demo.import_to_ue5('{args.obj_path}', '{args.asset_path}', '{args.blueprint_name}')")
-        print(f"print(f'Use this blueprint path: {{bp_path}}')")
+        print(f"mesh_path = demo.import_to_ue5('{args.obj_path}', '{args.asset_path}')")
+        print(f"print(f'Use this mesh path: {{mesh_path}}')")
         print("=" * 50 + "\n")
         
-        print("2. After the import is complete, copy the blueprint path and run:")
-        print(f"python {__file__} --action place --blueprint_path PASTE_BLUEPRINT_PATH_HERE --location {args.location}")
+        print("2. After the import is complete, copy the mesh path and run:")
+        print(f"python {__file__} --action place --blueprint_path PASTE_MESH_PATH_HERE --location {args.location}")
         
         # Ask if user wants to attempt runtime placement now
-        bp_path = f"{args.asset_path}/{args.blueprint_name}"
-        response = input(f"\nDo you want to attempt runtime placement now with path {bp_path}? (y/n): ")
+        mesh_path = f"{args.asset_path}/{os.path.basename(args.obj_path).split('.')[0]}"
+        response = input(f"\nDo you want to attempt runtime placement now with path {mesh_path}? (y/n): ")
         if response.lower() == 'y':
-            place_in_runtime(bp_path, args.location, args.rotation, args.scale)
+            place_in_runtime(mesh_path, args.location, args.rotation, args.scale)
 
 if __name__ == "__main__":
     main() 

@@ -2,17 +2,18 @@ import unreal
 import os
 import sys
 
-def import_obj_to_uasset(obj_path, output_asset_path='/Game/Meshes', blueprint_name='MeshBP'):
+def import_obj_to_uasset(obj_path, output_asset_path='/Game/Meshes', blueprint_name='MeshBP', create_blueprint=False):
     """
-    Import an OBJ file as a Static Mesh and create a Blueprint from it
+    Import an OBJ file as a Static Mesh and optionally create a Blueprint from it
     
     Args:
         obj_path (str): Path to the .obj file
         output_asset_path (str): Asset path in the content browser
         blueprint_name (str): Name for the generated blueprint
+        create_blueprint (bool): Whether to create a blueprint from the mesh
     
     Returns:
-        tuple: (mesh_asset_path, blueprint_path)
+        tuple: (mesh_asset_path, blueprint_path or None)
     """
     # Ensure the output directory exists
     if not unreal.EditorAssetLibrary.does_directory_exist(output_asset_path):
@@ -46,14 +47,16 @@ def import_obj_to_uasset(obj_path, output_asset_path='/Game/Meshes', blueprint_n
     mesh_asset_path = f"{output_asset_path}/{asset_name}"
     print(f"Mesh imported as: {mesh_asset_path}")
     
-    # Create blueprint from the mesh
-    blueprint_path = create_blueprint_from_mesh(mesh_asset_path, output_asset_path, blueprint_name)
+    # Create blueprint from the mesh if requested
+    blueprint_path = None
+    if create_blueprint:
+        blueprint_path = create_simple_blueprint(mesh_asset_path, output_asset_path, blueprint_name)
     
     return mesh_asset_path, blueprint_path
 
-def create_blueprint_from_mesh(mesh_asset_path, output_asset_path, blueprint_name):
+def create_simple_blueprint(mesh_asset_path, output_asset_path, blueprint_name):
     """
-    Create a blueprint with the mesh as a static mesh component
+    Create a minimal blueprint with a static mesh component using a simpler approach
     
     Args:
         mesh_asset_path (str): Path to the imported mesh asset
@@ -63,60 +66,49 @@ def create_blueprint_from_mesh(mesh_asset_path, output_asset_path, blueprint_nam
     Returns:
         str: Path to the created blueprint
     """
-    print(f"Creating blueprint from mesh: {mesh_asset_path}")
+    print(f"Creating simple blueprint from mesh: {mesh_asset_path}")
     
     try:
-        # Load the static mesh asset
-        mesh_asset = unreal.EditorAssetLibrary.load_asset(mesh_asset_path)
-        if mesh_asset is None:
-            print(f"Failed to load mesh asset at {mesh_asset_path}")
-            return None
-            
-        # Create blueprint factory
-        factory = unreal.BlueprintFactory()
-        factory.set_editor_property('parent_class', unreal.Actor)
+        # Create a blueprint factory for StaticMeshActor directly
+        blueprint_path = f"{output_asset_path}/{blueprint_name}"
         
-        # Create the blueprint asset
+        # Check if the blueprint already exists and delete it if it does
+        if unreal.EditorAssetLibrary.does_asset_exist(blueprint_path):
+            unreal.EditorAssetLibrary.delete_asset(blueprint_path)
+        
+        # Create a basic actor blueprint
+        factory = unreal.BlueprintFactory()
+        factory.set_editor_property('parent_class', unreal.StaticMeshActor)
+        
         asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
         blueprint = asset_tools.create_asset(blueprint_name, output_asset_path, unreal.Blueprint, factory)
         
         if blueprint is None:
             print("Failed to create blueprint asset")
             return None
-            
-        # Get the blueprint's SimpleConstructionScript
-        construction_script = blueprint.get_editor_property('simple_construction_script')
-        if construction_script is None:
-            print("Failed to get SimpleConstructionScript")
-            return None
-            
-        # Add a static mesh component to the blueprint
-        component = unreal.EditorAddComponentUtilities.add_static_mesh_component(
-            construction_script, 
-            "StaticMeshComponent"
-        )
         
-        # Set the static mesh asset to the component
-        if component is not None:
-            component.set_editor_property('static_mesh', mesh_asset)
-            
-        # Compile the blueprint with the updated API
-        if hasattr(unreal, 'KismetEditorUtilities'):
-            # Use KismetEditorUtilities if available (newer UE versions)
-            unreal.KismetEditorUtilities.compile_blueprint(blueprint)
-        else:
-            # Fallback to EditorLoadingAndSavingUtils
-            unreal.EditorLoadingAndSavingUtils.save_dirty_packages(False, True)
+        # Load the static mesh asset
+        mesh_asset = unreal.EditorAssetLibrary.load_asset(mesh_asset_path)
+        if mesh_asset is None:
+            print(f"Failed to load mesh asset at {mesh_asset_path}")
+            return None
+        
+        # Set the StaticMeshActor's mesh property - this works because we're extending StaticMeshActor
+        default_object = unreal.get_default_object(blueprint.generated_class())
+        if hasattr(default_object, 'static_mesh_component'):
+            static_mesh_component = default_object.static_mesh_component
+            if static_mesh_component:
+                static_mesh_component.set_static_mesh(mesh_asset)
+                print("Successfully set the static mesh on the blueprint")
         
         # Save the blueprint
         unreal.EditorAssetLibrary.save_loaded_asset(blueprint)
         
-        blueprint_path = f"{output_asset_path}/{blueprint_name}"
-        print(f"Blueprint created at: {blueprint_path}")
+        print(f"Simple blueprint created at: {blueprint_path}")
         return blueprint_path
         
     except Exception as e:
-        print(f"Error creating blueprint: {str(e)}")
+        print(f"Error creating simple blueprint: {str(e)}")
         return None
 
 # Example usage:
